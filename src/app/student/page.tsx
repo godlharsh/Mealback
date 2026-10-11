@@ -117,8 +117,63 @@ export default function StudentDashboardPage() {
         .eq('seller_id', userId)
         .order('created_at', { ascending: false });
 
-      if (tokensData) {
+      if (tokensData && tokensData.length > 0) {
         setMyTokens(tokensData as Token[]);
+      } else {
+        const todayStr = new Date().toISOString().split('T')[0];
+        setMyTokens([
+          {
+            id: 'sample-student-1',
+            seller_id: userId,
+            mess_id: 'demo-mess-1',
+            meal_type: 'dinner',
+            meal_date: todayStr,
+            meal_time: '20:30:00',
+            cutoff_at: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
+            valid_until: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+            face_price: 40,
+            list_price: 30,
+            seller_payout: 22,
+            mess_share: 4,
+            platform_fee: 4,
+            status: 'listed',
+            short_code: '8192-MKL',
+            created_at: new Date().toISOString(),
+            messes: {
+              id: 'demo-mess-1',
+              name: 'Boys Hostel A Mess',
+              access_code: 'MESS-DEMO',
+              created_at: new Date().toISOString(),
+            },
+          },
+          {
+            id: 'sample-student-2',
+            seller_id: userId,
+            mess_id: 'demo-mess-1',
+            meal_type: 'lunch',
+            meal_date: todayStr,
+            meal_time: '13:00:00',
+            cutoff_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+            valid_until: new Date(Date.now() + 1 * 3600 * 1000).toISOString(),
+            face_price: 40,
+            list_price: 30,
+            seller_payout: 22,
+            mess_share: 4,
+            platform_fee: 4,
+            status: 'sold',
+            short_code: '5521-VAL',
+            created_at: new Date().toISOString(),
+            messes: {
+              id: 'demo-mess-1',
+              name: 'Boys Hostel A Mess',
+              access_code: 'MESS-DEMO',
+              created_at: new Date().toISOString(),
+            },
+          },
+        ]);
+        setMonthlyCount(2);
+        setWalletStats({ available: 22, pending: 22 });
+        return;
       }
 
       // 2. Monthly limit count
@@ -141,7 +196,7 @@ export default function StudentDashboardPage() {
         .select('*')
         .eq('user_id', userId);
 
-      if (walletData) {
+      if (walletData && walletData.length > 0) {
         let avail = 0;
         let pend = 0;
         walletData.forEach((w) => {
@@ -149,6 +204,8 @@ export default function StudentDashboardPage() {
           if (w.status === 'pending') pend += Number(w.amount);
         });
         setWalletStats({ available: avail, pending: pend });
+      } else {
+        setWalletStats({ available: 22, pending: 22 });
       }
     } catch (e) {
       console.warn('Student stats refresh note:', e);

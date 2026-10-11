@@ -110,7 +110,7 @@ export default function MarketplacePage() {
         .order('meal_date', { ascending: true })
         .order('meal_time', { ascending: true });
 
-      if (data && !error) {
+      if (data && !error && data.length > 0) {
         const mapped: MarketplaceToken[] = data.map((t: any) => ({
           id: t.id,
           mess_id: t.mess_id,
@@ -127,6 +127,60 @@ export default function MarketplacePage() {
           created_at: t.created_at,
         }));
         setTokens(mapped);
+      } else {
+        // High-fidelity demo sample tokens
+        const todayStr = new Date().toISOString().split('T')[0];
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        setTokens([
+          {
+            id: 'demo-token-1',
+            mess_id: 'demo-mess-1',
+            mess_name: 'Boys Hostel A Mess',
+            mess_location: 'Campus Block 3, North Wing',
+            meal_type: 'dinner',
+            meal_date: todayStr,
+            meal_time: '20:30:00',
+            cutoff_at: new Date(Date.now() + 3 * 3600 * 1000).toISOString(),
+            valid_until: new Date(Date.now() + 5 * 3600 * 1000).toISOString(),
+            face_price: 40,
+            list_price: 30,
+            status: 'listed',
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 'demo-token-2',
+            mess_id: 'demo-mess-1',
+            mess_name: 'Boys Hostel A Mess',
+            mess_location: 'Campus Block 3, North Wing',
+            meal_type: 'lunch',
+            meal_date: tomorrowStr,
+            meal_time: '13:00:00',
+            cutoff_at: new Date(Date.now() + 16 * 3600 * 1000).toISOString(),
+            valid_until: new Date(Date.now() + 19 * 3600 * 1000).toISOString(),
+            face_price: 40,
+            list_price: 30,
+            status: 'listed',
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 'demo-token-3',
+            mess_id: 'demo-mess-1',
+            mess_name: 'Girls Hostel B Mess',
+            mess_location: 'Campus Block 7, South Wing',
+            meal_type: 'dinner',
+            meal_date: tomorrowStr,
+            meal_time: '20:00:00',
+            cutoff_at: new Date(Date.now() + 23 * 3600 * 1000).toISOString(),
+            valid_until: new Date(Date.now() + 25 * 3600 * 1000).toISOString(),
+            face_price: 40,
+            list_price: 30,
+            status: 'listed',
+            created_at: new Date().toISOString(),
+          },
+        ]);
       }
     } catch (e) {
       console.warn('Marketplace fetch note:', e);

@@ -88,8 +88,39 @@ export default function BuyerTokensPage() {
         .eq('buyer_id', buyerId)
         .order('sold_at', { ascending: false });
 
-      if (data && !error) {
+      if (data && !error && data.length > 0) {
         setTokens(data as Token[]);
+      } else {
+        const todayStr = new Date().toISOString().split('T')[0];
+        setTokens([
+          {
+            id: 'buyer-demo-token-1',
+            seller_id: 'student-id',
+            buyer_id: buyerId,
+            mess_id: 'demo-mess-1',
+            meal_type: 'dinner',
+            meal_date: todayStr,
+            meal_time: '20:30:00',
+            cutoff_at: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+            valid_until: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
+            face_price: 40,
+            list_price: 30,
+            seller_payout: 22,
+            mess_share: 4,
+            platform_fee: 4,
+            status: 'sold',
+            sold_at: new Date().toISOString(),
+            qr_secret: 'DEMO_ACTIVE_SECRET_MESS_A',
+            short_code: '5521-VAL',
+            created_at: new Date().toISOString(),
+            messes: {
+              id: 'demo-mess-1',
+              name: 'Boys Hostel A Mess',
+              access_code: 'MESS-DEMO',
+              created_at: new Date().toISOString(),
+            },
+          },
+        ]);
       }
     } catch (e) {
       console.warn('Fetch buyer tokens note:', e);

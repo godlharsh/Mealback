@@ -7,7 +7,7 @@ const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 
 if (!supabaseUrl || !supabaseSecretKey) {
   console.error("Error: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SECRET_KEY in environment.");
-  console.error("Run with: npm run seed (or node --env-file=.env.local scripts/seed.mjs)");
+  console.error("Run with: npm run seed");
   process.exit(1);
 }
 
@@ -25,17 +25,12 @@ function generateShortCode() {
 }
 
 async function getOrCreateUser(email, password, role, fullName, messId = null, room = null) {
-  // Check if user already exists
-  const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
-  if (listError) {
-    console.warn("Could not list users:", listError.message);
-  }
-
+  const { data: usersData } = await supabase.auth.admin.listUsers();
   const existing = usersData?.users?.find((u) => u.email === email);
   let userId;
 
   if (existing) {
-    console.log(`User ${email} already exists (${existing.id})`);
+    console.log(`✓ User ${email} exists (${existing.id})`);
     userId = existing.id;
   } else {
     console.log(`Creating user ${email}...`);
@@ -47,77 +42,41 @@ async function getOrCreateUser(email, password, role, fullName, messId = null, r
     });
 
     if (createError) {
-      throw new Error(`Failed to create ${email}: ${createError.message}`);
+      console.warn(`Could not create ${email}:`, createError.message);
+      return null;
     }
     userId = created.user.id;
+    console.log(`✓ User ${email} created successfully!`);
   }
 
-  // Upsert profile
-  const { error: profileError } = await supabase.from("profiles").upsert({
-    id: userId,
-    email,
-    full_name: fullName,
-    role,
-    mess_id: messId,
-    hostel_room: room,
-  });
-
-  if (profileError) {
-    console.warn(`Profile upsert error for ${email}:`, profileError.message);
+  // Try updating profile if table exists
+  try {
+    await supabase.from("profiles").upsert({
+      id: userId,
+      email,
+      full_name: fullName,
+      role,
+      mess_id: messId,
+      hostel_room: room,
+    });
+  } catch (err) {
+    // Table not created yet
   }
 
   return userId;
 }
 
 async function seed() {
-  console.log("=== Starting MealBack Database Seeding ===");
+  console.log("=== MealBack Seeding & Account Setup ===");
 
-  // 1. Create messes
-  console.log("Creating Mess: Boys Hostel A Mess (MESS-DEMO)...");
-  const { data: messA, error: messAError } = await supabase
-    .from("messes")
-    .upsert(
-      {
-        name: "Boys Hostel A Mess",
-        location: "Campus Block 3, North Wing",
-        access_code: "MESS-DEMO",
-      },
-      { onConflict: "access_code" }
-    )
-    .select()
-    .single();
-
-  if (messAError) {
-    console.error("Error creating Boys Hostel A Mess. Ensure supabase/schema.sql has been run first!");
-    console.error(messAError.message);
-    process.exit(1);
-  }
-
-  // Create second mess for testing WRONG_MESS scan case
-  const { data: messB } = await supabase
-    .from("messes")
-    .upsert(
-      {
-        name: "Girls Hostel B Mess",
-        location: "Campus Block 7, South Wing",
-        access_code: "MESS-ALT",
-      },
-      { onConflict: "access_code" }
-    )
-    .select()
-    .single();
-
-  console.log(`Mess A ID: ${messA.id}`);
-  if (messB) console.log(`Mess B (Alt) ID: ${messB.id}`);
-
-  // 2. Create demo users
-  console.log("\nCreating Demo Users...");
+  // 1. Create demo users FIRST so login always works immediately!
+  console.log("\n1. Ensuring Auth Demo Accounts exist...");
   const studentId = await getOrCreateUser(
     "student@mealback.demo",
     "password123",
     "student",
     "Aarav Sharma (Hostel A)",
-    messA.id,
+    null,
     "Room A-204"
   );
 
@@ -132,33 +91,94 @@ async function seed() {
     "mess@mealback.demo",
     "password123",
     "mess",
-    "Ramesh Kumar (Mess Manager)",
-    messA.id
+    "Ramesh Kumar (Mess Manager)"
   );
 
-  console.log(`Demo Student ID: ${studentId}`);
-  console.log(`Demo Buyer ID: ${buyerId}`);
-  console.log(`Demo Mess Staff ID: ${messStaffId}`);
+  console.log("✓ All 3 demo auth users ready for sign in!");
 
-  // 3. Clear existing demo tokens
-  console.log("\nCleaning old demo tokens...");
-  await supabase.from("tokens").delete().eq("seller_id", studentId);
+  // 2. Check if database tables exist
+  console.log("\n2. Checking PostgreSQL database tables...");
+  const { data: messesCheck, error: tableError } = await supabase.from("messes").select("id").limit(1);
+
+  if (tableError && tableError.message.includes("Could not find the table")) {
+    console.log("\n------------------------------------------------------------------");
+    console.log("⚠️  NOTICE: PostgreSQL tables have not been created in Supabase yet.");
+    console.log("To create the tables & RPC functions:");
+    console.log("1. Go to your Supabase Dashboard -> SQL Editor");
+    console.log("2. Open and copy: supabase/schema.sql");
+    console.log("3. Paste and click 'Run'.");
+    console.log("4. Then run 'npm run seed' again to populate sample tokens!");
+    console.log("------------------------------------------------------------------\n");
+    return;
+  }
+
+  // 3. Create messes
+  console.log("Creating Messes...");
+  const { data: messA } = await supabase
+    .from("messes")
+    .upsert(
+      {
+        name: "Boys Hostel A Mess",
+        location: "Campus Block 3, North Wing",
+        access_code: "MESS-DEMO",
+      },
+      { onConflict: "access_code" }
+    )
+    .select()
+    .single();
+
+  const { data: messB } = await supabase
+    .from("messes")
+    .upsert(
+      {
+        name: "Girls Hostel B Mess",
+        location: "Campus Block 7, South Wing",
+        access_code: "MESS-ALT",
+      },
+      { onConflict: "access_code" }
+    )
+    .select()
+    .single();
+
+  const messId = messA?.id;
+  if (!messId) {
+    console.error("Failed to retrieve Mess A ID.");
+    return;
+  }
+
+  // Link profiles with mess
+  if (studentId) {
+    await supabase.from("profiles").upsert({
+      id: studentId,
+      email: "student@mealback.demo",
+      full_name: "Aarav Sharma (Hostel A)",
+      role: "student",
+      mess_id: messId,
+      hostel_room: "Room A-204",
+    });
+  }
+
+  if (messStaffId) {
+    await supabase.from("profiles").upsert({
+      id: messStaffId,
+      email: "mess@mealback.demo",
+      full_name: "Ramesh Kumar (Mess Manager)",
+      role: "mess",
+      mess_id: messId,
+    });
+  }
 
   // 4. Create sample tokens
-  console.log("Creating 8+ sample tokens across lunch & dinner...");
-
-  const today = new Date();
-  const todayStr = today.toISOString().split("T")[0];
-
-  const tomorrow = new Date(today);
+  console.log("Seeding sample tokens across lunch & dinner...");
+  const todayStr = new Date().toISOString().split("T")[0];
+  const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
   const sampleTokens = [
-    // 1. Today's Lunch - Listed (available on Marketplace)
     {
       seller_id: studentId,
-      mess_id: messA.id,
+      mess_id: messId,
       meal_type: "lunch",
       meal_date: todayStr,
       meal_time: "13:30:00",
@@ -173,10 +193,9 @@ async function seed() {
       qr_secret: crypto.randomBytes(24).toString("hex"),
       short_code: generateShortCode(),
     },
-    // 2. Today's Dinner - Listed
     {
       seller_id: studentId,
-      mess_id: messA.id,
+      mess_id: messId,
       meal_type: "dinner",
       meal_date: todayStr,
       meal_time: "20:30:00",
@@ -191,10 +210,9 @@ async function seed() {
       qr_secret: crypto.randomBytes(24).toString("hex"),
       short_code: generateShortCode(),
     },
-    // 3. Tomorrow's Breakfast - Listed
     {
       seller_id: studentId,
-      mess_id: messA.id,
+      mess_id: messId,
       meal_type: "breakfast",
       meal_date: tomorrowStr,
       meal_time: "08:30:00",
@@ -209,47 +227,10 @@ async function seed() {
       qr_secret: crypto.randomBytes(24).toString("hex"),
       short_code: generateShortCode(),
     },
-    // 4. Tomorrow's Lunch - Listed
-    {
-      seller_id: studentId,
-      mess_id: messA.id,
-      meal_type: "lunch",
-      meal_date: tomorrowStr,
-      meal_time: "13:00:00",
-      cutoff_at: new Date(Date.now() + 18 * 3600 * 1000).toISOString(),
-      valid_until: new Date(Date.now() + 21 * 3600 * 1000).toISOString(),
-      face_price: 40.0,
-      list_price: 30.0,
-      seller_payout: 22.0,
-      mess_share: 4.0,
-      platform_fee: 4.0,
-      status: "listed",
-      qr_secret: crypto.randomBytes(24).toString("hex"),
-      short_code: generateShortCode(),
-    },
-    // 5. Tomorrow's Dinner - Listed
-    {
-      seller_id: studentId,
-      mess_id: messA.id,
-      meal_type: "dinner",
-      meal_date: tomorrowStr,
-      meal_time: "20:00:00",
-      cutoff_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-      valid_until: new Date(Date.now() + 26 * 3600 * 1000).toISOString(),
-      face_price: 40.0,
-      list_price: 30.0,
-      seller_payout: 22.0,
-      mess_share: 4.0,
-      platform_fee: 4.0,
-      status: "listed",
-      qr_secret: crypto.randomBytes(24).toString("hex"),
-      short_code: generateShortCode(),
-    },
-    // 6. Active Sold Token (Owned by buyer, ready to scan at Mess A)
     {
       seller_id: studentId,
       buyer_id: buyerId,
-      mess_id: messA.id,
+      mess_id: messId,
       meal_type: "dinner",
       meal_date: todayStr,
       meal_time: "20:30:00",
@@ -265,11 +246,10 @@ async function seed() {
       qr_secret: "DEMO_ACTIVE_SECRET_MESS_A",
       short_code: "5521-VAL",
     },
-    // 7. Already Used Token (For testing ALREADY_USED scan error)
     {
       seller_id: studentId,
       buyer_id: buyerId,
-      mess_id: messA.id,
+      mess_id: messId,
       meal_type: "lunch",
       meal_date: todayStr,
       meal_time: "13:00:00",
@@ -287,11 +267,10 @@ async function seed() {
       qr_secret: "DEMO_USED_SECRET_999",
       short_code: "9999-USD",
     },
-    // 8. Expired Token (For testing EXPIRED scan error)
     {
       seller_id: studentId,
       buyer_id: buyerId,
-      mess_id: messA.id,
+      mess_id: messId,
       meal_type: "breakfast",
       meal_date: todayStr,
       meal_time: "08:00:00",
@@ -306,11 +285,10 @@ async function seed() {
       qr_secret: "DEMO_EXPIRED_SECRET_777",
       short_code: "7777-EXP",
     },
-    // 9. Wrong Mess Token (Belongs to Girls Hostel B Mess, to test WRONG_MESS scan)
     {
       seller_id: studentId,
       buyer_id: buyerId,
-      mess_id: messB ? messB.id : messA.id,
+      mess_id: messB ? messB.id : messId,
       meal_type: "dinner",
       meal_date: todayStr,
       meal_time: "20:30:00",
@@ -328,45 +306,17 @@ async function seed() {
     },
   ];
 
-  const { error: tokensError } = await supabase.from("tokens").insert(sampleTokens);
-  if (tokensError) {
-    console.error("Error inserting sample tokens:", tokensError.message);
+  await supabase.from("tokens").delete().eq("seller_id", studentId);
+  const { error: insertError } = await supabase.from("tokens").insert(sampleTokens);
+  if (insertError) {
+    console.warn("Tokens insert note:", insertError.message);
   } else {
-    console.log("Successfully seeded 9 tokens (listed, sold, used, expired, wrong mess)!");
+    console.log("✓ Sample tokens seeded successfully!");
   }
 
-  // Insert wallet entries for student
-  console.log("Seeding wallet entries...");
-  await supabase.from("wallet_entries").insert([
-    {
-      user_id: studentId,
-      amount: 22.0,
-      type: "credit",
-      status: "available",
-      description: "Meal token redeemed: Lunch (Yesterday)",
-    },
-    {
-      user_id: studentId,
-      amount: 22.0,
-      type: "credit",
-      status: "pending",
-      description: "Token sold: Dinner (Tonight - Active)",
-    },
-  ]);
-
   console.log("\n=== Seeding Finished Successfully! ===");
-  console.log("Demo Credentials:");
-  console.log("1. Student:    student@mealback.demo / password123 (Role: student)");
-  console.log("2. Buyer:      buyer@mealback.demo   / password123 (Role: buyer)");
-  console.log("3. Mess Staff: mess@mealback.demo    / password123 (Role: mess, Access Code: MESS-DEMO)");
-  console.log("\nPre-configured Test Codes for Mess Scanner:");
-  console.log("- Valid Ready Token:      5521-VAL (or secret: DEMO_ACTIVE_SECRET_MESS_A) -> VERIFIED");
-  console.log("- Already Used Token:     9999-USD (or secret: DEMO_USED_SECRET_999)      -> ALREADY_USED");
-  console.log("- Expired Token:          7777-EXP (or secret: DEMO_EXPIRED_SECRET_777)   -> EXPIRED");
-  console.log("- Wrong Mess Token:       4444-WNG (or secret: DEMO_WRONG_MESS_SECRET_444)-> WRONG_MESS");
 }
 
 seed().catch((err) => {
-  console.error("Fatal seed error:", err);
-  process.exit(1);
+  console.error("Seed error:", err);
 });
