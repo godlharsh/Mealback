@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-brand-dark: #0F3D2E;
+  --color-brand-primary: #1F7A4D;
+  --color-brand-yellow: #F6C945;
+  --color-brand-mint: #EAF5EE;
+  --color-brand-coral: #E8704A;
+  --color-brand-ink: #14281F;
+  --color-brand-muted: #5C6B63;
+}
+
+body {
+  background-color: var(--color-brand-mint);
+  color: var(--color-brand-ink);
+  font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom ticket perforation notches */
+.ticket-notch-left {
+  position: absolute;
+  left: -12px;
+  width: 24px;
+  height: 24px;
+  background-color: var(--color-brand-mint);
+  border-radius: 9999px;
+  box-shadow: inset -2px 0 3px rgba(15, 61, 46, 0.05);
+}
+
+.ticket-notch-right {
+  position: absolute;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  background-color: var(--color-brand-mint);
+  border-radius: 9999px;
+  box-shadow: inset 2px 0 3px rgba(15, 61, 46, 0.05);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 61, 46, 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 61, 46, 0.25);
+}
