@@ -6,19 +6,20 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useToast } from '@/components/ui/Toast';
 import { Token, Mess, MealType } from '@/types/database';
-import { TOKEN_CONFIG } from '@/lib/constants';
+import { PRICING_CONFIG, TIMING_CONFIG, POLICY_CONFIG } from '@/lib/constants';
 import { createClient } from '@/lib/supabase/client';
 import {
   PlusCircle,
   Wallet,
   Clock,
-  Calendar,
   Sparkles,
   AlertCircle,
-  CheckCircle2,
   ListOrdered,
   Loader2,
-  TrendingUp,
+  Coins,
+  ShieldCheck,
+  Building2,
+  ArrowRight,
 } from 'lucide-react';
 
 export default function StudentDashboardPage() {
@@ -37,7 +38,7 @@ export default function StudentDashboardPage() {
   const [mealType, setMealType] = useState<MealType>('dinner');
   const [mealDate, setMealDate] = useState<string>('');
   const [mealTime, setMealTime] = useState<string>('20:30');
-  const [listPrice, setListPrice] = useState<number>(30);
+  const [listPrice, setListPrice] = useState<number>(PRICING_CONFIG.DEFAULT_LIST_PRICE);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string>('');
 
@@ -58,41 +59,52 @@ export default function StudentDashboardPage() {
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
+      // Parallelize profile, messes, and student stats to eliminate waterfall delays
+      try {
+        const [profileRes, messRes] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', authUser.id).single(),
+          supabase.from('messes').select('*').order('name'),
+        ]);
 
-      setUser({
-        id: authUser.id,
-        email: authUser.email,
-        role: profile?.role || 'student',
-        fullName: profile?.full_name,
-        messId: profile?.mess_id,
-      });
+        const profileData = profileRes.data;
+        const messList = messRes.data || [];
 
-      // Fetch messes
-      const { data: messList } = await supabase.from('messes').select('*');
-      if (messList && messList.length > 0) {
-        setMesses(messList);
-        setSelectedMess(profile?.mess_id || messList[0].id);
+        setUser({
+          id: authUser.id,
+          email: authUser.email,
+          role: profileData?.role || 'student',
+          fullName: profileData?.full_name,
+          messId: profileData?.mess_id,
+        });
+
+        if (messList.length > 0) {
+          setMesses(messList);
+          const defaultMessId = profileData?.mess_id && messList.some((m: Mess) => m.id === profileData.mess_id)
+            ? profileData.mess_id
+            : messList[0].id;
+          setSelectedMess(defaultMessId);
+        } else {
+          setMesses([]);
+          setSelectedMess('');
+        }
+
+        await refreshStudentStats(authUser.id);
+      } catch (err) {
+        console.warn('Dashboard data fetch note:', err);
+      } finally {
+        setIsLoading(false);
       }
-
-      await refreshStudentStats(authUser.id);
-      setIsLoading(false);
     }
 
     loadStudentData();
 
-    // Supabase Realtime: updates when token status changes (e.g. bought by buyer)
+    // Supabase Realtime: updates when token status changes
     const channel = supabase
       .channel('student-tokens-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tokens' },
         (payload) => {
-          // If a token owned by this student was updated (e.g. sold or used)
           if (user?.id) {
             refreshStudentStats(user.id);
             if (payload.eventType === 'UPDATE' && (payload.new as any).status === 'sold') {
@@ -110,129 +122,89 @@ export default function StudentDashboardPage() {
 
   const refreshStudentStats = async (userId: string) => {
     try {
-      // 1. Fetch user's listings
-      const { data: tokensData } = await supabase
-        .from('tokens')
-        .select('*, messes(*)')
-        .eq('seller_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (tokensData && tokensData.length > 0) {
-        setMyTokens(tokensData as Token[]);
-      } else {
-        const todayStr = new Date().toISOString().split('T')[0];
-        setMyTokens([
-          {
-            id: 'sample-student-1',
-            seller_id: userId,
-            mess_id: 'demo-mess-1',
-            meal_type: 'dinner',
-            meal_date: todayStr,
-            meal_time: '20:30:00',
-            cutoff_at: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
-            valid_until: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
-            face_price: 40,
-            list_price: 30,
-            seller_payout: 22,
-            mess_share: 4,
-            platform_fee: 4,
-            status: 'listed',
-            short_code: '8192-MKL',
-            created_at: new Date().toISOString(),
-            messes: {
-              id: 'demo-mess-1',
-              name: 'Boys Hostel A Mess',
-              access_code: 'MESS-DEMO',
-              created_at: new Date().toISOString(),
-            },
-          },
-          {
-            id: 'sample-student-2',
-            seller_id: userId,
-            mess_id: 'demo-mess-1',
-            meal_type: 'lunch',
-            meal_date: todayStr,
-            meal_time: '13:00:00',
-            cutoff_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
-            valid_until: new Date(Date.now() + 1 * 3600 * 1000).toISOString(),
-            face_price: 40,
-            list_price: 30,
-            seller_payout: 22,
-            mess_share: 4,
-            platform_fee: 4,
-            status: 'sold',
-            short_code: '5521-VAL',
-            created_at: new Date().toISOString(),
-            messes: {
-              id: 'demo-mess-1',
-              name: 'Boys Hostel A Mess',
-              access_code: 'MESS-DEMO',
-              created_at: new Date().toISOString(),
-            },
-          },
-        ]);
-        setMonthlyCount(2);
-        setWalletStats({ available: 22, pending: 22 });
-        return;
-      }
-
-      // 2. Monthly limit count
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
 
-      const { count } = await supabase
-        .from('tokens')
-        .select('*', { count: 'exact', head: true })
-        .eq('seller_id', userId)
-        .neq('status', 'cancelled')
-        .gte('created_at', startOfMonth.toISOString());
+      // Parallelize tokens, monthly count, and wallet entries
+      const [tokensRes, countRes, walletRes] = await Promise.all([
+        supabase
+          .from('tokens')
+          .select('*, messes(*)')
+          .eq('seller_id', userId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('tokens')
+          .select('*', { count: 'exact', head: true })
+          .eq('seller_id', userId)
+          .neq('status', 'cancelled')
+          .gte('created_at', startOfMonth.toISOString()),
+        supabase
+          .from('wallet_entries')
+          .select('*')
+          .eq('user_id', userId),
+      ]);
 
-      setMonthlyCount(count || 0);
+      setMyTokens(tokensRes.data ? (tokensRes.data as Token[]) : []);
+      setMonthlyCount(countRes.count || 0);
 
-      // 3. Wallet stats
-      const { data: walletData } = await supabase
-        .from('wallet_entries')
-        .select('*')
-        .eq('user_id', userId);
-
-      if (walletData && walletData.length > 0) {
+      if (walletRes.data && walletRes.data.length > 0) {
         let avail = 0;
         let pend = 0;
-        walletData.forEach((w) => {
+        walletRes.data.forEach((w: any) => {
           if (w.status === 'available' || w.status === 'paid') avail += Number(w.amount);
           if (w.status === 'pending') pend += Number(w.amount);
         });
         setWalletStats({ available: avail, pending: pend });
       } else {
-        setWalletStats({ available: 22, pending: 22 });
+        setWalletStats({ available: 0, pending: 0 });
       }
     } catch (e) {
       console.warn('Student stats refresh note:', e);
+      setMyTokens([]);
+      setMonthlyCount(0);
+      setWalletStats({ available: 0, pending: 0 });
     }
   };
 
   const handleListMeal = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setFormError('');
 
-    if (monthlyCount >= TOKEN_CONFIG.MONTHLY_SELLER_LIMIT) {
-      setFormError('Monthly limit reached! You have already listed 10 meals this calendar month.');
+    if (messes.length === 0 || !selectedMess) {
+      setFormError('No mess registered yet. Ask your mess administrator to register your mess.');
       return;
     }
 
-    if (!selectedMess || !mealDate || !mealTime) {
-      setFormError('Please select mess, meal date, and meal time.');
+    if (monthlyCount >= POLICY_CONFIG.MONTHLY_SELLER_LIMIT) {
+      setFormError(
+        `Monthly limit reached! You have already listed ${POLICY_CONFIG.MONTHLY_SELLER_LIMIT} meals this calendar month.`
+      );
+      return;
+    }
+
+    if (!mealDate || !mealTime) {
+      setFormError('Please select meal date and serving time.');
+      return;
+    }
+
+    if (listPrice < PRICING_CONFIG.MIN_LIST_PRICE || listPrice > PRICING_CONFIG.MAX_LIST_PRICE) {
+      setFormError(
+        `Asking price must be between ₹${PRICING_CONFIG.MIN_LIST_PRICE} and ₹${PRICING_CONFIG.MAX_LIST_PRICE}.`
+      );
       return;
     }
 
     // Client-side pre-validation of cutoff
     const mealDateTime = new Date(`${mealDate}T${mealTime}`);
-    const cutoffDateTime = new Date(mealDateTime.getTime() - 2 * 60 * 60 * 1000);
+    const cutoffDateTime = new Date(
+      mealDateTime.getTime() - TIMING_CONFIG.CUTOFF_HOURS_BEFORE * 60 * 60 * 1000
+    );
 
     if (new Date() >= cutoffDateTime) {
       setFormError(
-        'Cutoff time has already passed for this meal! Meals must be listed at least 2 hours before serving time.'
+        `Cutoff time has already passed for this meal! Meals must be listed at least ${TIMING_CONFIG.CUTOFF_HOURS_BEFORE} hours before serving time.`
       );
       return;
     }
@@ -248,7 +220,7 @@ export default function StudentDashboardPage() {
           mealType,
           mealDate,
           mealTime: `${mealTime}:00`,
-          listPrice: 30,
+          listPrice,
         }),
       });
 
@@ -258,7 +230,10 @@ export default function StudentDashboardPage() {
         throw new Error(data.error || 'Failed to list meal.');
       }
 
-      showToast('Meal successfully listed on the marketplace! ₹22 will be credited upon redemption.', 'success');
+      showToast(
+        `Meal successfully listed for ₹${listPrice}! Payout will unlock upon mess verification.`,
+        'success'
+      );
       if (user?.id) {
         await refreshStudentStats(user.id);
       }
@@ -269,7 +244,7 @@ export default function StudentDashboardPage() {
     }
   };
 
-  const remainingQuota = Math.max(0, TOKEN_CONFIG.MONTHLY_SELLER_LIMIT - monthlyCount);
+  const remainingQuota = Math.max(0, POLICY_CONFIG.MONTHLY_SELLER_LIMIT - monthlyCount);
 
   return (
     <AppLayout user={user}>
@@ -288,10 +263,10 @@ export default function StudentDashboardPage() {
                 </span>
               </div>
               <h2 className="text-2xl font-black">
-                {monthlyCount}/{TOKEN_CONFIG.MONTHLY_SELLER_LIMIT} Listed This Month
+                {monthlyCount}/{POLICY_CONFIG.MONTHLY_SELLER_LIMIT} Listed This Month
               </h2>
               <p className="text-xs text-emerald-100/90 mt-1 max-w-md">
-                Hostel policy allows a maximum of 10 listed meal passes per student each calendar month to prevent commercial abuse.
+                Hostel policy allows a maximum of {POLICY_CONFIG.MONTHLY_SELLER_LIMIT} listed meal passes per student each calendar month to prevent commercial abuse.
               </p>
             </div>
 
@@ -300,13 +275,13 @@ export default function StudentDashboardPage() {
               <div className="w-full h-3 rounded-full bg-white/20 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
-                    monthlyCount >= 10
+                    monthlyCount >= POLICY_CONFIG.MONTHLY_SELLER_LIMIT
                       ? 'bg-rose-400'
                       : monthlyCount >= 7
                       ? 'bg-amber-400'
                       : 'bg-brand-yellow'
                   }`}
-                  style={{ width: `${(monthlyCount / TOKEN_CONFIG.MONTHLY_SELLER_LIMIT) * 100}%` }}
+                  style={{ width: `${(monthlyCount / POLICY_CONFIG.MONTHLY_SELLER_LIMIT) * 100}%` }}
                 />
               </div>
               <div className="flex justify-between items-center text-[11px] font-semibold text-emerald-200 mt-1.5">
@@ -351,13 +326,37 @@ export default function StudentDashboardPage() {
                 List a Meal You Will Skip
               </h2>
               <p className="text-xs text-brand-muted mt-0.5">
-                List before cutoff (2 hours before meal time). Buyers can purchase for ₹30.
+                List before cutoff ({TIMING_CONFIG.CUTOFF_HOURS_BEFORE} hours before serving time). Choose your own price.
               </p>
             </div>
             <span className="hidden sm:inline-flex text-xs font-bold text-brand-primary px-3 py-1 rounded-full bg-brand-mint">
-              You Earn ₹22
+              Set Your Own Price
             </span>
           </div>
+
+          {/* Helpful Missing Mess Notice */}
+          {messes.length === 0 && !isLoading && (
+            <div className="mt-5 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Building2 className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-xs">No Mess Registered Yet</h4>
+                  <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                    Ask your mess administrator or dining hall in-charge to register your mess to enable meal token listings.
+                  </p>
+                </div>
+              </div>
+              {user?.role === 'mess' && (
+                <Link
+                  href="/mess"
+                  className="px-4 py-2 rounded-xl bg-amber-900 text-white font-bold text-xs hover:bg-amber-950 transition-colors shrink-0 flex items-center gap-1.5"
+                >
+                  <span>Register Mess</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
+          )}
 
           {formError && (
             <div className="mt-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
@@ -376,14 +375,24 @@ export default function StudentDashboardPage() {
                 <select
                   value={selectedMess}
                   onChange={(e) => setSelectedMess(e.target.value)}
-                  className="w-full p-3 rounded-2xl border border-gray-200 bg-brand-light text-sm font-semibold focus:border-brand-primary focus:outline-none"
+                  disabled={messes.length === 0}
+                  className="w-full p-3 rounded-2xl border border-gray-200 bg-brand-light text-sm font-semibold focus:border-brand-primary focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {messes.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
+                  {messes.length === 0 ? (
+                    <option value="">No mess registered yet</option>
+                  ) : (
+                    messes.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} {m.location ? `(${m.location})` : ''}
+                      </option>
+                    ))
+                  )}
                 </select>
+                {messes.length === 0 && (
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    Registration required before meals can be listed.
+                  </p>
+                )}
               </div>
 
               {/* Meal Type */}
@@ -398,9 +407,9 @@ export default function StudentDashboardPage() {
                       type="button"
                       onClick={() => {
                         setMealType(type);
-                        if (type === 'breakfast') setMealTime('08:30');
-                        if (type === 'lunch') setMealTime('13:00');
-                        if (type === 'dinner') setMealTime('20:30');
+                        if (type === 'breakfast') setMealTime(TIMING_CONFIG.DEFAULTS.breakfast.start);
+                        if (type === 'lunch') setMealTime(TIMING_CONFIG.DEFAULTS.lunch.start);
+                        if (type === 'dinner') setMealTime(TIMING_CONFIG.DEFAULTS.dinner.start);
                       }}
                       className={`py-2 rounded-xl text-xs font-bold capitalize transition-all ${
                         mealType === type
@@ -442,53 +451,71 @@ export default function StudentDashboardPage() {
                   onChange={(e) => setMealTime(e.target.value)}
                   className="w-full p-3 rounded-2xl border border-gray-200 bg-brand-light text-sm font-semibold focus:border-brand-primary focus:outline-none"
                 />
+                <p className="text-[11px] text-brand-muted mt-1">
+                  Cutoff: {TIMING_CONFIG.CUTOFF_HOURS_BEFORE} hours before this time.
+                </p>
               </div>
 
-              {/* Fixed Platform Pricing Split Preview */}
-              <div className="p-4 rounded-2xl bg-brand-mint/60 border border-brand-primary/20">
-                <div className="flex items-center justify-between text-xs font-bold mb-2">
-                  <span className="text-brand-dark">Fair Value Split (₹30 Token)</span>
-                  <span className="text-brand-primary">40 Face Value</span>
+              {/* Student Asking Price */}
+              <div>
+                <label className="block text-xs font-bold text-brand-ink mb-1.5">
+                  Your Asking Price (₹)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-sm font-bold text-brand-muted">₹</span>
+                  <input
+                    type="number"
+                    required
+                    min={PRICING_CONFIG.MIN_LIST_PRICE}
+                    max={PRICING_CONFIG.MAX_LIST_PRICE}
+                    value={listPrice}
+                    onChange={(e) => setListPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                    placeholder="Enter price"
+                    className="w-full pl-8 pr-3 py-3 rounded-2xl border border-gray-200 bg-brand-light text-sm font-bold text-brand-dark focus:border-brand-primary focus:outline-none"
+                  />
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-white p-2 rounded-xl shadow-xs border border-emerald-950/5">
-                    <span className="text-[10px] text-brand-muted uppercase block">You Get</span>
-                    <span className="font-extrabold text-brand-primary text-sm">₹22</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl shadow-xs border border-emerald-950/5">
-                    <span className="text-[10px] text-brand-muted uppercase block">Mess Share</span>
-                    <span className="font-bold text-brand-dark text-sm">₹4</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl shadow-xs border border-emerald-950/5">
-                    <span className="text-[10px] text-brand-muted uppercase block">Platform</span>
-                    <span className="font-bold text-brand-dark text-sm">₹4</span>
-                  </div>
-                </div>
+                <p className="text-[11px] text-brand-muted mt-1">
+                  Range: ₹{PRICING_CONFIG.MIN_LIST_PRICE} - ₹{PRICING_CONFIG.MAX_LIST_PRICE}. Credited to your wallet when mess verifies scan.
+                </p>
+              </div>
+            </div>
+
+            {/* Payout Assurance Banner */}
+            <div className="p-4 rounded-2xl bg-brand-mint/60 border border-brand-primary/15 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-brand-primary shrink-0 mt-0.5" />
+              <div className="text-xs text-brand-ink">
+                <span className="font-bold">Peer-to-Peer Meal Transfer: </span>
+                Buyers pay your exact listed price (₹{listPrice}). The full amount is credited to your wallet once redeemed at the mess counter.
               </div>
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isSubmitting || monthlyCount >= 10}
-              className="w-full py-4 rounded-2xl bg-brand-primary text-white font-extrabold text-sm shadow-card hover:bg-brand-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={isSubmitting || messes.length === 0 || monthlyCount >= POLICY_CONFIG.MONTHLY_SELLER_LIMIT}
+              className="w-full py-4 rounded-2xl bg-brand-primary text-white font-extrabold text-sm shadow-card hover:bg-brand-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Publishing Token to Marketplace...</span>
                 </>
+              ) : messes.length === 0 ? (
+                <>
+                  <Building2 className="w-4 h-4" />
+                  <span>Waiting for Mess Registration</span>
+                </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-brand-yellow fill-brand-yellow" />
-                  <span>List Token on Marketplace (List Price ₹30)</span>
+                  <span>List Token on Marketplace (Asking Price: ₹{listPrice})</span>
                 </>
               )}
             </button>
           </form>
         </div>
 
-        {/* My Recent Listings with Realtime Status Badges */}
+        {/* My Recent Listings */}
         <div className="bg-white rounded-3xl p-6 md:p-8 shadow-card border border-emerald-950/5">
           <div className="flex items-center justify-between pb-4 border-b border-brand-mint">
             <div>
@@ -534,15 +561,21 @@ export default function StudentDashboardPage() {
                         <span className="font-mono text-xs font-bold text-brand-muted">
                           {token.short_code}
                         </span>
-                        <p className="text-xs font-bold text-emerald-700">₹{token.seller_payout} payout</p>
+                        <p className="text-xs font-bold text-emerald-700">₹{token.list_price} payout</p>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <p className="text-xs text-brand-muted">You haven't listed any meal tokens yet.</p>
+              <div className="text-center py-12">
+                <div className="w-12 h-12 rounded-full bg-brand-mint text-brand-primary flex items-center justify-center mx-auto mb-3">
+                  <Coins className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-sm text-brand-dark">No meals listed yet</h4>
+                <p className="text-xs text-brand-muted mt-1 max-w-xs mx-auto">
+                  When you plan to skip a mess meal, list it above to earn credits into your wallet.
+                </p>
               </div>
             )}
           </div>

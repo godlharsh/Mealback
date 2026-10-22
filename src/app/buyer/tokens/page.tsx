@@ -36,21 +36,34 @@ export default function BuyerTokensPage() {
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
+      try {
+        const [profileRes, tokensRes] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', authUser.id).single(),
+          supabase
+            .from('tokens')
+            .select('*, messes(*)')
+            .eq('buyer_id', authUser.id)
+            .order('sold_at', { ascending: false }),
+        ]);
 
-      setUser({
-        id: authUser.id,
-        email: authUser.email,
-        role: profile?.role || authUser.user_metadata?.role || 'buyer',
-        fullName: profile?.full_name,
-      });
+        const profile = profileRes.data;
+        setUser({
+          id: authUser.id,
+          email: authUser.email,
+          role: profile?.role || authUser.user_metadata?.role || 'buyer',
+          fullName: profile?.full_name,
+        });
 
-      await fetchTokens(authUser.id);
-      setIsLoading(false);
+        if (tokensRes.data && !tokensRes.error && tokensRes.data.length > 0) {
+          setTokens(tokensRes.data as Token[]);
+        } else {
+          setTokens([]);
+        }
+      } catch (err) {
+        console.warn('Buyer load note:', err);
+      } finally {
+        setIsLoading(false);
+      }
     }
 
     loadBuyerData();
@@ -91,39 +104,11 @@ export default function BuyerTokensPage() {
       if (data && !error && data.length > 0) {
         setTokens(data as Token[]);
       } else {
-        const todayStr = new Date().toISOString().split('T')[0];
-        setTokens([
-          {
-            id: 'buyer-demo-token-1',
-            seller_id: 'student-id',
-            buyer_id: buyerId,
-            mess_id: 'demo-mess-1',
-            meal_type: 'dinner',
-            meal_date: todayStr,
-            meal_time: '20:30:00',
-            cutoff_at: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
-            valid_until: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
-            face_price: 40,
-            list_price: 30,
-            seller_payout: 22,
-            mess_share: 4,
-            platform_fee: 4,
-            status: 'sold',
-            sold_at: new Date().toISOString(),
-            qr_secret: 'DEMO_ACTIVE_SECRET_MESS_A',
-            short_code: '5521-VAL',
-            created_at: new Date().toISOString(),
-            messes: {
-              id: 'demo-mess-1',
-              name: 'Boys Hostel A Mess',
-              access_code: 'MESS-DEMO',
-              created_at: new Date().toISOString(),
-            },
-          },
-        ]);
+        setTokens([]);
       }
     } catch (e) {
       console.warn('Fetch buyer tokens note:', e);
+      setTokens([]);
     }
   };
 
@@ -221,7 +206,7 @@ export default function BuyerTokensPage() {
               className="inline-flex items-center gap-2 mt-5 px-5 py-3 rounded-2xl bg-brand-primary text-white font-bold text-xs shadow-soft hover:bg-brand-dark transition-colors"
             >
               <Sparkles className="w-4 h-4 text-brand-yellow fill-brand-yellow" />
-              Explore Marketplace (₹30 Meals)
+              Explore Marketplace
             </Link>
           </div>
         )}

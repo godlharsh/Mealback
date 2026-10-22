@@ -25,7 +25,7 @@ export default function MessStatsPage() {
     sold_count: 0,
     used_count: 0,
     pending_count: 0,
-    average_rating: 4.8,
+    average_rating: null,
     meals: {
       breakfast: { listed: 0, sold: 0, used: 0 },
       lunch: { listed: 0, sold: 0, used: 0 },
@@ -91,12 +91,12 @@ export default function MessStatsPage() {
             <div>
               <h1 className="text-2xl font-black text-brand-dark">Today's Mess Dashboard</h1>
               <p className="text-xs text-brand-muted mt-0.5">
-                {messInfo?.name || 'Boys Hostel A Mess'} &bull; Real-time redemption analytics
+                {messInfo?.name || 'Campus Mess'} &bull; Real-time redemption analytics
               </p>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold">
               <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
-              <span>Mess Average Rating: {stats.average_rating || 4.8} / 5.0</span>
+              <span>Mess Average Rating: {stats.average_rating ? `${stats.average_rating} / 5.0` : 'No ratings yet'}</span>
             </div>
           </div>
         </div>
@@ -141,13 +141,13 @@ export default function MessStatsPage() {
 
           <div className="bg-white p-5 rounded-3xl shadow-card border border-emerald-950/5">
             <span className="text-xs font-bold text-brand-muted uppercase tracking-wider block">
-              Mess Commission
+              Redemption Rate
             </span>
             <span className="text-3xl font-black text-brand-dark mt-1 block">
-              ₹{(stats.sold_count + stats.used_count) * 4}
+              {stats.sold_count > 0 ? `${Math.round((stats.used_count / stats.sold_count) * 100)}%` : '0%'}
             </span>
             <span className="text-[11px] text-brand-muted font-semibold mt-1 block">
-              ₹4 per sold token
+              Of sold passes served
             </span>
           </div>
         </div>

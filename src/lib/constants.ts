@@ -1,18 +1,31 @@
-// Money split of one Rs 30 token: seller Rs 22, mess Rs 4, MealBack Rs 4
-export const TOKEN_CONFIG = {
-  FACE_PRICE: 40,
-  LIST_PRICE: 30,
-  SELLER_PAYOUT: 22,
-  MESS_SHARE: 4,
-  PLATFORM_FEE: 4,
-  MONTHLY_SELLER_LIMIT: 10,
-  CUTOFF_HOURS_BEFORE: 2, // Cutoff 2 hours before meal
-  VALIDITY_MINUTES_AFTER: 90, // Valid until 90 minutes after meal time
+export const PRICING_CONFIG = {
+  MIN_PRICE: 5,
+  MAX_PRICE: 1000,
+  MIN_LIST_PRICE: 5,
+  MAX_LIST_PRICE: 1000,
+  DEFAULT_LIST_PRICE: 30,
+  DEFAULT_BREAKFAST_PRICE: 25,
+  DEFAULT_LUNCH_PRICE: 35,
+  DEFAULT_DINNER_PRICE: 35,
 } as const;
 
-export const DEMO_CONFIG = {
-  DEMO_MESS_ACCESS_CODE: 'MESS-DEMO',
-  DEFAULT_MESS_NAME: 'Boys Hostel A Mess',
+export const TIMING_CONFIG = {
+  CUTOFF_HOURS_BEFORE: 2, // Cutoff 2 hours before serving time
+  VALIDITY_MINUTES_AFTER: 90, // Valid until 90 minutes after meal time
+  DEFAULT_MEAL_TIMES: {
+    breakfast: '08:30',
+    lunch: '13:00',
+    dinner: '20:30',
+  },
+  DEFAULTS: {
+    breakfast: { start: '08:30' },
+    lunch: { start: '13:00' },
+    dinner: { start: '20:30' },
+  },
+} as const;
+
+export const POLICY_CONFIG = {
+  MONTHLY_SELLER_LIMIT: 10, // Max 10 skipped meals per student per calendar month
 } as const;
 
 export const STATUS_COLORS = {

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Logo } from '@/components/ui/Logo';
 import { useToast } from '@/components/ui/Toast';
-import { Lock, Mail, ArrowRight, Loader2, Sparkles, KeyRound } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 
 function LoginForm() {
   const router = useRouter();
@@ -16,12 +16,14 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isResending, setIsResending] = useState(false);
+  const [error, setError] = useState(searchParams.get('error') || '');
+  const [infoMessage, setInfoMessage] = useState('');
 
   const redirectUrl = searchParams.get('redirect');
 
-  const handleLogin = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!email || !password) {
       setError('Please fill in both email and password.');
       return;
@@ -29,6 +31,7 @@ function LoginForm() {
 
     setIsLoading(true);
     setError('');
+    setInfoMessage('');
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -62,11 +65,32 @@ function LoginForm() {
     }
   };
 
-  const handleDemoFill = (roleEmail: string) => {
-    setEmail(roleEmail);
-    setPassword('password123');
-    setError('');
+  const handleResendVerification = async () => {
+    if (!email) {
+      setError('Please enter your email address to resend verification.');
+      return;
+    }
+    setIsResending(true);
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to resend verification email.');
+      }
+      setInfoMessage(data.message || 'Verification email sent! Check your inbox.');
+      showToast('Verification email resent!', 'success');
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend verification email.');
+    } finally {
+      setIsResending(false);
+    }
   };
+
+  const isUnconfirmed = error.toLowerCase().includes('confirm') || error.toLowerCase().includes('verif');
 
   return (
     <motion.div
@@ -84,9 +108,37 @@ function LoginForm() {
         </p>
       </div>
 
+      {infoMessage && (
+        <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+          {infoMessage}
+        </div>
+      )}
+
       {error && (
-        <div className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
-          {error}
+        <div className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex flex-col gap-2">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+          {isUnconfirmed && (
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-800 underline hover:text-rose-950 self-start mt-1"
+            >
+              <RefreshCw className={`w-3 h-3 ${isResending ? 'animate-spin' : ''}`} />
+              <span>Resend verification email</span>
+            </button>
+          )}
+          {error.toLowerCase().includes('password') && (
+            <Link
+              href="/forgot-password"
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 underline hover:text-rose-950 self-start mt-0.5"
+            >
+              Reset your password with Forgot Password &rarr;
+            </Link>
+          )}
         </div>
       )}
 
@@ -109,9 +161,17 @@ function LoginForm() {
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-brand-ink mb-1.5">
-            Password
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold text-brand-ink">
+              Password
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-[11px] font-semibold text-brand-primary hover:underline"
+            >
+              Forgot Password?
+            </Link>
+          </div>
           <div className="relative">
             <Lock className="w-4 h-4 text-brand-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -144,43 +204,8 @@ function LoginForm() {
         </button>
       </form>
 
-      {/* Quick Demo Fill Buttons */}
-      <div className="mt-6 pt-5 border-t border-brand-mint">
-        <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-brand-dark mb-2.5">
-          <Sparkles className="w-3.5 h-3.5 text-brand-yellow fill-brand-yellow" />
-          <span>One-Click Demo Credentials</span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => handleDemoFill('student@mealback.demo')}
-            className="p-2 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-900 text-xs font-bold flex flex-col items-center gap-1 transition-colors"
-          >
-            <span>🎓 Student</span>
-            <span className="text-[10px] text-emerald-700 font-normal">Hostel A</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDemoFill('buyer@mealback.demo')}
-            className="p-2 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100 text-blue-900 text-xs font-bold flex flex-col items-center gap-1 transition-colors"
-          >
-            <span>🛒 Buyer</span>
-            <span className="text-[10px] text-blue-700 font-normal">Day Scholar</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDemoFill('mess@mealback.demo')}
-            className="p-2 rounded-xl border border-amber-200 bg-amber-50/60 hover:bg-amber-100 text-amber-900 text-xs font-bold flex flex-col items-center gap-1 transition-colors"
-          >
-            <span>🍲 Mess Staff</span>
-            <span className="text-[10px] text-amber-700 font-normal">Scanner</span>
-          </button>
-        </div>
-      </div>
-
       {/* Bottom Switch to Sign Up */}
-      <div className="mt-6 text-center text-xs text-brand-muted">
+      <div className="mt-6 text-center text-xs text-brand-muted pt-5 border-t border-brand-mint">
         Don't have an account yet?{' '}
         <Link
           href="/signup"

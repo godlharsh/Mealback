@@ -1,5 +1,4 @@
 import { createClient } from './supabase/server';
-import { createAdminClient } from './supabase/admin';
 import { defaultPaymentProvider } from './payments/demo-upi';
 import {
   MarketplaceToken,
@@ -9,33 +8,17 @@ import {
   MealType,
   Mess,
 } from '@/types/database';
-import { TOKEN_CONFIG } from './constants';
+import { PRICING_CONFIG, TIMING_CONFIG, POLICY_CONFIG } from './constants';
 
 /**
- * Data service handling database queries and atomic RPC functions.
+ * Data service handling real database queries and atomic RPC functions.
  */
 
 export async function getMesses(): Promise<Mess[]> {
   const supabase = createClient();
   const { data, error } = await supabase.from('messes').select('*').order('name');
-  if (error || !data || data.length === 0) {
-    // Sensible fallback if not seeded yet
-    return [
-      {
-        id: '11111111-1111-1111-1111-111111111111',
-        name: 'Boys Hostel A Mess',
-        location: 'Campus Block 3, North Wing',
-        access_code: 'MESS-DEMO',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: '22222222-2222-2222-2222-222222222222',
-        name: 'Girls Hostel B Mess',
-        location: 'Campus Block 7, South Wing',
-        access_code: 'MESS-ALT',
-        created_at: new Date().toISOString(),
-      },
-    ];
+  if (error || !data) {
+    return [];
   }
   return data;
 }
@@ -46,28 +29,8 @@ export async function getMarketplaceTokens(filter?: {
 }): Promise<MarketplaceToken[]> {
   const supabase = createClient();
   let query = supabase
-    .from('tokens')
-    .select(
-      `
-      id,
-      mess_id,
-      meal_type,
-      meal_date,
-      meal_time,
-      cutoff_at,
-      valid_until,
-      face_price,
-      list_price,
-      status,
-      created_at,
-      messes (
-        name,
-        location
-      )
-    `
-    )
-    .eq('status', 'listed')
-    .gt('cutoff_at', new Date().toISOString())
+    .from('marketplace_tokens')
+    .select('*')
     .order('meal_date', { ascending: true })
     .order('meal_time', { ascending: true });
 
@@ -81,22 +44,54 @@ export async function getMarketplaceTokens(filter?: {
   const { data, error } = await query;
 
   if (error || !data) {
-    console.warn('Marketplace query note:', error?.message);
-    return [];
+    // Fallback directly to tokens if view not populated
+    let directQuery = supabase
+      .from('tokens')
+      .select('*, messes(name, location)')
+      .eq('status', 'listed')
+      .gt('cutoff_at', new Date().toISOString())
+      .order('meal_date', { ascending: true })
+      .order('meal_time', { ascending: true });
+
+    if (filter?.mealType && filter.mealType !== 'all') {
+      directQuery = directQuery.eq('meal_type', filter.mealType);
+    }
+    if (filter?.messId && filter.messId !== 'all') {
+      directQuery = directQuery.eq('mess_id', filter.messId);
+    }
+
+    const directRes = await directQuery;
+    if (directRes.error || !directRes.data) {
+      return [];
+    }
+
+    return directRes.data.map((t: any) => ({
+      id: t.id,
+      mess_id: t.mess_id,
+      mess_name: t.messes?.name || 'Mess',
+      mess_location: t.messes?.location || null,
+      meal_type: t.meal_type as MealType,
+      meal_date: t.meal_date,
+      meal_time: t.meal_time,
+      cutoff_at: t.cutoff_at,
+      valid_until: t.valid_until,
+      list_price: Number(t.list_price),
+      status: t.status,
+      created_at: t.created_at,
+    }));
   }
 
   return data.map((item: any) => ({
     id: item.id,
     mess_id: item.mess_id,
-    mess_name: item.messes?.name || 'Hostel Mess',
-    mess_location: item.messes?.location || null,
+    mess_name: item.mess_name,
+    mess_location: item.mess_location || null,
     meal_type: item.meal_type as MealType,
     meal_date: item.meal_date,
     meal_time: item.meal_time,
     cutoff_at: item.cutoff_at,
     valid_until: item.valid_until,
-    face_price: Number(item.face_price || 40),
-    list_price: Number(item.list_price || 30),
+    list_price: Number(item.list_price),
     status: item.status,
     created_at: item.created_at,
   }));
@@ -123,7 +118,6 @@ export async function getSellerMonthlyCount(sellerId: string): Promise<number> {
   });
 
   if (error || typeof data !== 'number') {
-    // Direct count fallback
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
@@ -187,18 +181,28 @@ export async function listMealTokenAction(params: {
   mealType: MealType;
   mealDate: string;
   mealTime: string;
-  listPrice?: number;
+  listPrice: number;
 }): Promise<{ success: boolean; error?: string; tokenId?: string }> {
   const supabase = createClient();
 
-  // Try calling the atomic Postgres RPC function first
+  if (
+    !params.listPrice ||
+    params.listPrice < PRICING_CONFIG.MIN_PRICE ||
+    params.listPrice > PRICING_CONFIG.MAX_PRICE
+  ) {
+    return {
+      success: false,
+      error: `Asking price must be between ₹${PRICING_CONFIG.MIN_PRICE} and ₹${PRICING_CONFIG.MAX_PRICE}.`,
+    };
+  }
+
   const { data, error } = await supabase.rpc('list_meal_token', {
     p_seller_id: params.sellerId,
     p_mess_id: params.messId,
     p_meal_type: params.mealType,
     p_meal_date: params.mealDate,
     p_meal_time: params.mealTime,
-    p_list_price: params.listPrice || TOKEN_CONFIG.LIST_PRICE,
+    p_list_price: params.listPrice,
   });
 
   if (error) {
@@ -216,21 +220,43 @@ export async function buyTokenAction(params: {
   tokenId: string;
   buyerId: string;
 }): Promise<{ success: boolean; error?: string; token?: any }> {
-  // 1. Process simulated UPI payment
+  const supabase = createClient();
+
+  // 1. Fetch token to get actual student-selected price
+  const { data: tokenRecord, error: fetchErr } = await supabase
+    .from('tokens')
+    .select('id, list_price, status, cutoff_at, meal_type')
+    .eq('id', params.tokenId)
+    .single();
+
+  if (fetchErr || !tokenRecord) {
+    return { success: false, error: 'Meal token not found or no longer available.' };
+  }
+
+  if (tokenRecord.status !== 'listed') {
+    return { success: false, error: `This meal pass is ${tokenRecord.status}.` };
+  }
+
+  if (new Date() >= new Date(tokenRecord.cutoff_at)) {
+    return { success: false, error: 'The purchase cutoff time for this meal has passed.' };
+  }
+
+  const actualPrice = Number(tokenRecord.list_price);
+
+  // 2. Process simulated UPI payment for the exact asking price
   const paymentRes = await defaultPaymentProvider.processPayment({
     tokenId: params.tokenId,
-    amount: TOKEN_CONFIG.LIST_PRICE,
+    amount: actualPrice,
     currency: 'INR',
     buyerId: params.buyerId,
-    description: `MealBack Token Purchase #${params.tokenId.slice(0, 8)}`,
+    description: `MealBack ${tokenRecord.meal_type} pass purchase`,
   });
 
   if (!paymentRes.success) {
     return { success: false, error: paymentRes.error || 'Payment failed' };
   }
 
-  // 2. Call atomic Postgres function with row lock
-  const supabase = createClient();
+  // 3. Call atomic Postgres function with row lock
   const { data, error } = await supabase.rpc('buy_token', {
     p_token_id: params.tokenId,
     p_buyer_id: params.buyerId,
@@ -264,7 +290,7 @@ export async function scanTokenAction(params: {
   if (error) {
     return {
       result: 'INVALID',
-      message: error.message,
+      message: error.message || 'Database error verifying token',
     };
   }
 
@@ -281,31 +307,19 @@ export async function getMessStats(messId: string, dateStr?: string) {
   });
 
   if (error || !data) {
-    // Direct count fallback
-    const { data: tokens } = await supabase
-      .from('tokens')
-      .select('*')
-      .eq('mess_id', messId)
-      .eq('meal_date', targetDate);
-
-    const list = tokens || [];
-    const listed = list.filter((t) => t.status === 'listed').length;
-    const sold = list.filter((t) => t.status === 'sold').length;
-    const used = list.filter((t) => t.status === 'used').length;
-
     return {
       date: targetDate,
-      listed_count: listed,
-      sold_count: sold,
-      used_count: used,
-      pending_count: listed + sold,
+      listed_count: 0,
+      sold_count: 0,
+      used_count: 0,
+      pending_count: 0,
       meals: {
         lunch: { listed: 0, sold: 0, used: 0 },
         dinner: { listed: 0, sold: 0, used: 0 },
         breakfast: { listed: 0, sold: 0, used: 0 },
       },
       recent_scans: [],
-      average_rating: 4.5,
+      average_rating: 0,
     };
   }
 

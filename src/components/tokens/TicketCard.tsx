@@ -71,7 +71,7 @@ export function TicketCard({ token, onRate }: TicketCardProps) {
               <Utensils className="w-4 h-4 text-emerald-400" />
             </h3>
             <p className="text-sm font-semibold text-emerald-200 truncate mt-0.5">
-              {token.messes?.name || 'Boys Hostel A Mess'}
+              {token.messes?.name || 'Campus Mess'}
             </p>
           </div>
           <div className="text-right">

@@ -122,11 +122,11 @@ export default function StudentListingsPage() {
                       <StatusBadge status={token.status} size="sm" />
                     </div>
                     <p className="text-xs text-brand-muted">
-                      {token.messes?.name || 'Boys Hostel A Mess'} &bull; Date: {token.meal_date} &bull; Serving: {token.meal_time.slice(0, 5)}
+                      {token.messes?.name || 'Mess'} &bull; Date: {token.meal_date} &bull; Serving: {token.meal_time.slice(0, 5)}
                     </p>
                     <p className="text-[11px] text-brand-muted flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-brand-primary" />
-                      Cutoff was: {new Date(token.cutoff_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <Clock className="w-3 text-brand-primary" />
+                      Cutoff: {new Date(token.cutoff_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
 
@@ -141,7 +141,7 @@ export default function StudentListingsPage() {
                     <div className="text-right">
                       <span className="text-xs text-brand-muted block">Your Payout</span>
                       <span className="font-extrabold text-base text-brand-primary">
-                        ₹{token.seller_payout}
+                        ₹{token.list_price}
                       </span>
                     </div>
                   </div>

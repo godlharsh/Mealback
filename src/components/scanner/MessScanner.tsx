@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ScanResult } from '@/types/database';
+import { ScanResult, ScanResultStatus } from '@/types/database';
 import {
   Camera,
   Keyboard,
@@ -12,7 +11,6 @@ import {
   XCircle,
   HelpCircle,
   RefreshCw,
-  Utensils,
   ArrowRight,
   ShieldAlert,
 } from 'lucide-react';
@@ -26,10 +24,11 @@ export function MessScanner({ onScanComplete }: MessScannerProps) {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'camera' | 'manual'>('camera');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const scannerRef = useRef<any>(null);
 
   const processVerification = async (identifier: string) => {
-    if (isProcessing) return;
+    if (isProcessing || !identifier.trim()) return;
     setIsProcessing(true);
 
     try {
@@ -39,54 +38,93 @@ export function MessScanner({ onScanComplete }: MessScannerProps) {
         body: JSON.stringify({ identifier: identifier.trim() }),
       });
 
-      const data: ScanResult = await res.json();
-      setScanResult(data);
+      const data = await res.json();
+
+      let typedResult: ScanResult;
+
+      if (data && typeof data === 'object' && data.result) {
+        typedResult = data as ScanResult;
+      } else if (data && data.error) {
+        typedResult = {
+          result: 'INVALID',
+          message: data.error,
+        };
+      } else {
+        typedResult = {
+          result: 'INVALID',
+          message: `Server returned status ${res.status}: Verification failed.`,
+        };
+      }
+
+      setScanResult(typedResult);
       if (onScanComplete) {
-        onScanComplete(data);
+        onScanComplete(typedResult);
       }
     } catch (err: any) {
-      setScanResult({
+      const fallbackResult: ScanResult = {
         result: 'INVALID',
-        message: err.message || 'Network error verifying token',
-      });
+        message: err.message || 'Network connection failed while verifying token.',
+      };
+      setScanResult(fallbackResult);
+      if (onScanComplete) {
+        onScanComplete(fallbackResult);
+      }
     } finally {
       setIsProcessing(false);
     }
   };
 
   useEffect(() => {
+    let isMounted = true;
+    setCameraError(null);
+
     if (activeTab === 'camera') {
-      const scanner = new Html5QrcodeScanner(
-        'mealback-qr-reader',
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          rememberLastUsedCamera: true,
-          aspectRatio: 1.0,
-        },
-        false
-      );
+      import('html5-qrcode')
+        .then(({ Html5QrcodeScanner }) => {
+          if (!isMounted) return;
 
-      scanner.render(
-        (decodedText) => {
-          // Pause and verify
-          processVerification(decodedText);
-        },
-        (errorMessage) => {
-          // ignore common scan frame noise
-        }
-      );
+          try {
+            const scanner = new Html5QrcodeScanner(
+              'mealback-qr-reader',
+              {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                rememberLastUsedCamera: true,
+                aspectRatio: 1.0,
+              },
+              false
+            );
 
-      scannerRef.current = scanner;
+            scanner.render(
+              (decodedText) => {
+                processVerification(decodedText);
+              },
+              () => {
+                // Ignore frame-by-frame read noise
+              }
+            );
 
-      return () => {
-        try {
-          scanner.clear();
-        } catch (e) {
-          // cleanup
-        }
-      };
+            scannerRef.current = scanner;
+          } catch (e: any) {
+            setCameraError(e?.message || 'Could not initialize camera scanner. Use manual code entry.');
+          }
+        })
+        .catch((e) => {
+          setCameraError('Camera module failed to load. Use manual code entry.');
+        });
     }
+
+    return () => {
+      isMounted = false;
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.clear();
+        } catch {
+          // ignore cleanup error
+        }
+        scannerRef.current = null;
+      }
+    };
   }, [activeTab]);
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -99,6 +137,8 @@ export function MessScanner({ onScanComplete }: MessScannerProps) {
     setScanResult(null);
     setManualCode('');
   };
+
+  const resultState = scanResult?.result || 'INVALID';
 
   return (
     <div className="relative">
@@ -142,6 +182,12 @@ export function MessScanner({ onScanComplete }: MessScannerProps) {
                 Align the buyer's QR code within the viewfinder
               </p>
             </div>
+
+            {cameraError && (
+              <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs text-center">
+                {cameraError}
+              </div>
+            )}
 
             <div
               id="mealback-qr-reader"
@@ -199,60 +245,11 @@ export function MessScanner({ onScanComplete }: MessScannerProps) {
                 )}
               </button>
             </form>
-
-            {/* Quick Demo Test Buttons */}
-            <div className="mt-6 pt-5 border-t border-brand-mint">
-              <p className="text-[11px] font-bold text-brand-muted uppercase tracking-wider mb-2 text-center">
-                Quick Test Shortcuts (Seeded demo tokens)
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualCode('5521-VAL');
-                    processVerification('5521-VAL');
-                  }}
-                  className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 text-left"
-                >
-                  🟢 5521-VAL (Ready)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualCode('9999-USD');
-                    processVerification('9999-USD');
-                  }}
-                  className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold border border-rose-200 text-left"
-                >
-                  🔴 9999-USD (Used)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualCode('7777-EXP');
-                    processVerification('7777-EXP');
-                  }}
-                  className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold border border-amber-200 text-left"
-                >
-                  🟡 7777-EXP (Expired)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualCode('4444-WNG');
-                    processVerification('4444-WNG');
-                  }}
-                  className="p-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-800 font-bold border border-orange-200 text-left"
-                >
-                  🟠 4444-WNG (Other Mess)
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </div>
 
-      {/* HUGE FULL-SCREEN RESULT MODAL */}
+      {/* FULL-SCREEN RESULT MODAL */}
       <AnimatePresence>
         {scanResult && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
@@ -261,32 +258,32 @@ export function MessScanner({ onScanComplete }: MessScannerProps) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.85, y: 30 }}
               className={`max-w-md w-full rounded-3xl overflow-hidden shadow-2xl border-4 text-center p-8 ${
-                scanResult.result === 'VERIFIED'
+                resultState === 'VERIFIED'
                   ? 'bg-emerald-600 text-white border-emerald-400'
-                  : scanResult.result === 'ALREADY_USED'
+                  : resultState === 'ALREADY_USED'
                   ? 'bg-rose-700 text-white border-rose-500'
-                  : scanResult.result === 'EXPIRED'
+                  : resultState === 'EXPIRED'
                   ? 'bg-amber-500 text-amber-950 border-amber-300'
-                  : scanResult.result === 'WRONG_MESS'
+                  : resultState === 'WRONG_MESS'
                   ? 'bg-orange-600 text-white border-orange-400'
                   : 'bg-slate-700 text-white border-slate-500'
               }`}
             >
               {/* Icon state */}
               <div className="w-24 h-24 rounded-full mx-auto flex items-center justify-center shadow-lg bg-white/20 backdrop-blur-sm mb-6">
-                {scanResult.result === 'VERIFIED' && (
+                {resultState === 'VERIFIED' && (
                   <CheckCircle2 className="w-16 h-16 text-white stroke-[2.5]" />
                 )}
-                {scanResult.result === 'ALREADY_USED' && (
+                {resultState === 'ALREADY_USED' && (
                   <XCircle className="w-16 h-16 text-white stroke-[2.5]" />
                 )}
-                {scanResult.result === 'EXPIRED' && (
+                {resultState === 'EXPIRED' && (
                   <AlertTriangle className="w-16 h-16 text-amber-950 stroke-[2.5]" />
                 )}
-                {scanResult.result === 'WRONG_MESS' && (
+                {resultState === 'WRONG_MESS' && (
                   <ShieldAlert className="w-16 h-16 text-white stroke-[2.5]" />
                 )}
-                {scanResult.result === 'INVALID' && (
+                {resultState === 'INVALID' && (
                   <HelpCircle className="w-16 h-16 text-white stroke-[2.5]" />
                 )}
               </div>
@@ -294,68 +291,67 @@ export function MessScanner({ onScanComplete }: MessScannerProps) {
               {/* Status Header */}
               <div className="space-y-2">
                 <span className="text-xs font-black tracking-widest uppercase px-3 py-1 rounded-full bg-black/20">
-                  {scanResult.result}
+                  {resultState}
                 </span>
 
-                <h2 className="text-4xl font-black tracking-tight">
-                  {scanResult.result === 'VERIFIED' && 'Serve karo!'}
-                  {scanResult.result === 'ALREADY_USED' && 'ALREADY USED!'}
-                  {scanResult.result === 'EXPIRED' && 'TOKEN EXPIRED!'}
-                  {scanResult.result === 'WRONG_MESS' && 'WRONG MESS!'}
-                  {scanResult.result === 'INVALID' && 'INVALID TOKEN!'}
+                <h2 className="text-3xl md:text-4xl font-black tracking-tight">
+                  {resultState === 'VERIFIED' && 'Token Verified!'}
+                  {resultState === 'ALREADY_USED' && 'Already Used!'}
+                  {resultState === 'EXPIRED' && 'Token Expired!'}
+                  {resultState === 'WRONG_MESS' && 'Wrong Mess!'}
+                  {resultState === 'INVALID' && 'Invalid Token'}
                 </h2>
 
                 <p className="text-sm font-semibold opacity-90 max-w-xs mx-auto">
-                  {scanResult.message}
+                  {scanResult.message || 'Verification complete.'}
                 </p>
               </div>
 
               {/* Detailed Context Box */}
-              <div className="my-6 p-4 rounded-2xl bg-black/20 backdrop-blur-sm text-xs font-medium space-y-1.5">
-                {scanResult.meal_type && (
-                  <div className="flex justify-between items-center">
-                    <span className="opacity-75">Meal Type:</span>
-                    <span className="font-bold text-sm uppercase">
-                      {scanResult.meal_type}
-                    </span>
-                  </div>
-                )}
-                {scanResult.short_code && (
-                  <div className="flex justify-between items-center">
-                    <span className="opacity-75">Short Code:</span>
-                    <span className="font-mono font-bold">{scanResult.short_code}</span>
-                  </div>
-                )}
-                {scanResult.used_at && (
-                  <div className="flex justify-between items-center">
-                    <span className="opacity-75">Used At:</span>
-                    <span className="font-bold">
-                      {new Date(scanResult.used_at).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                )}
-                {scanResult.valid_until && (
-                  <div className="flex justify-between items-center">
-                    <span className="opacity-75">Validity Expired:</span>
-                    <span className="font-bold">
-                      {new Date(scanResult.valid_until).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                )}
-              </div>
+              {(scanResult.meal_type || scanResult.short_code || scanResult.used_at || scanResult.valid_until) && (
+                <div className="my-6 p-4 rounded-2xl bg-black/20 backdrop-blur-sm text-xs font-medium space-y-1.5 text-left">
+                  {scanResult.meal_type && (
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-75">Meal:</span>
+                      <span className="font-bold uppercase">{scanResult.meal_type}</span>
+                    </div>
+                  )}
+                  {scanResult.short_code && (
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-75">Short Code:</span>
+                      <span className="font-mono font-bold">{scanResult.short_code}</span>
+                    </div>
+                  )}
+                  {scanResult.used_at && (
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-75">Redeemed At:</span>
+                      <span className="font-bold">
+                        {new Date(scanResult.used_at).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {scanResult.valid_until && (
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-75">Validity Expired:</span>
+                      <span className="font-bold">
+                        {new Date(scanResult.valid_until).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Action Button */}
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 onClick={handleNextScan}
-                className="w-full py-4 rounded-2xl bg-white text-brand-dark font-black text-base shadow-lg hover:bg-brand-mint transition-colors"
+                className="w-full mt-6 py-4 rounded-2xl bg-white text-brand-dark font-black text-base shadow-lg hover:bg-brand-mint transition-colors"
               >
                 Next Scan
               </motion.button>

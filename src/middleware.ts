@@ -2,6 +2,18 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // 1. Immediately bypass all Next.js internals, static assets, and API routes
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/static') ||
+    pathname.includes('.')
+  ) {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -36,23 +48,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-
-  // Public asset and API paths to ignore
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/static') ||
-    pathname.includes('.')
-  ) {
-    return response;
-  }
-
-  // Auth pages (login / signup)
+  // 2. Auth pages (login / signup) - Redirect to dashboard if already logged in
   const isAuthPage = pathname === '/login' || pathname === '/signup';
 
   if (isAuthPage && user) {
-    // If user already logged in, route to appropriate dashboard based on user metadata or default
     const role = user.user_metadata?.role || 'student';
     if (role === 'mess') {
       return NextResponse.redirect(new URL('/mess', request.url));
@@ -63,7 +62,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Protected route checking
+  // 3. Protected role routes checking
   const isStudentRoute = pathname.startsWith('/student');
   const isBuyerRoute = pathname.startsWith('/buyer');
   const isMessRoute = pathname.startsWith('/mess');
@@ -77,8 +76,9 @@ export async function middleware(request: NextRequest) {
 
     const role = user.user_metadata?.role;
 
-    if (isMessRoute && role !== 'mess') {
-      return NextResponse.redirect(new URL('/marketplace', request.url));
+    // Allow any authenticated user to access /mess to register or join; restrict subroutes (/mess/stats, /mess/history) to verified mess role
+    if (isMessRoute && pathname !== '/mess' && role !== 'mess') {
+      return NextResponse.redirect(new URL('/mess', request.url));
     }
 
     if (isStudentRoute && role !== 'student') {
@@ -91,6 +91,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js|woff|woff2|ico)$).*)',
   ],
 };

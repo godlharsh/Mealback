@@ -80,7 +80,7 @@ export default function HomePage() {
         </h1>
 
         <p className="text-sm md:text-base text-brand-muted max-w-xl mx-auto leading-relaxed">
-          Hostel students who skip mess meals can list them as digital tokens. Day scholars and friends buy fresh meals for ₹30. One-time QR verification at the counter ensures seamless serving.
+          Hostel students who skip mess meals can list them as digital tokens at their chosen price. Anyone can purchase available meal tokens with secure instant QR verification at the mess counter.
         </p>
 
         {/* Action Buttons */}
@@ -101,41 +101,8 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Money Split Feature Highlight */}
-        <div className="pt-8 max-w-2xl mx-auto">
-          <div className="bg-white rounded-3xl p-6 shadow-card border border-emerald-950/5 text-left">
-            <h3 className="font-extrabold text-sm text-brand-dark mb-3 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-brand-primary" />
-              Transparent ₹30 Token Value Distribution
-            </h3>
-            <div className="grid grid-cols-3 gap-3 text-center text-xs">
-              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
-                <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider block">
-                  Student Earns
-                </span>
-                <span className="text-2xl font-black text-brand-primary mt-1 block">₹22</span>
-                <span className="text-[10px] text-emerald-700">For skipped meal</span>
-              </div>
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-100">
-                <span className="text-[10px] text-amber-800 font-bold uppercase tracking-wider block">
-                  Mess Share
-                </span>
-                <span className="text-2xl font-black text-amber-900 mt-1 block">₹4</span>
-                <span className="text-[10px] text-amber-700">Loses zero fees + extra</span>
-              </div>
-              <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                <span className="text-[10px] text-gray-700 font-bold uppercase tracking-wider block">
-                  MealBack Fee
-                </span>
-                <span className="text-2xl font-black text-gray-800 mt-1 block">₹4</span>
-                <span className="text-[10px] text-gray-600">Platform & cloud</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Role Portals Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-4 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-8 text-left">
           <Link
             href="/student"
             className="bg-white rounded-3xl p-6 shadow-card border border-emerald-950/5 hover:border-brand-primary/30 transition-all group"
@@ -145,7 +112,7 @@ export default function HomePage() {
             </div>
             <h3 className="font-extrabold text-base text-brand-dark">For Hostel Students</h3>
             <p className="text-xs text-brand-muted mt-1 leading-relaxed">
-              List up to 10 skipped meals per calendar month. Earn ₹22 into your digital wallet upon verified scan.
+              List up to 10 skipped meals per calendar month. Set your own asking price and receive payouts directly to your digital wallet upon verified scan.
             </p>
             <span className="inline-flex items-center gap-1 text-xs font-bold text-brand-primary mt-4 group-hover:underline">
               Enter Student Dashboard &rarr;
@@ -161,7 +128,7 @@ export default function HomePage() {
             </div>
             <h3 className="font-extrabold text-base text-brand-dark">For Day Scholars & Guests</h3>
             <p className="text-xs text-brand-muted mt-1 leading-relaxed">
-              Browse available lunch & dinner passes at ₹30 (25% off ₹40 face value). Pay with simulated UPI and get your QR.
+              Browse available breakfast, lunch, and dinner passes at student-listed prices. Pay with simulated UPI and get your QR.
             </p>
             <span className="inline-flex items-center gap-1 text-xs font-bold text-brand-primary mt-4 group-hover:underline">
               Browse Marketplace &rarr;
@@ -189,9 +156,6 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t border-emerald-950/5 py-6 text-center text-xs font-medium text-brand-muted">
         <p>MealBack &bull; "Skip a meal. Get value back." &bull; Campus Food Token Platform</p>
-        <p className="mt-1 text-[11px] font-bold text-brand-primary uppercase tracking-widest">
-          Prototype
-        </p>
       </footer>
     </div>
   );

@@ -106,12 +106,9 @@ export function MarketplaceCard({ token, onBuy, isOwner }: MarketplaceCardProps)
             <span className="text-2xl font-black text-brand-dark">
               ₹{token.list_price}
             </span>
-            <span className="text-sm font-semibold text-brand-muted line-through">
-              ₹{token.face_price}
-            </span>
           </div>
-          <p className="text-[11px] font-semibold text-emerald-700">
-            Save ₹{token.face_price - token.list_price} (25% off)
+          <p className="text-[11px] font-medium text-brand-muted">
+            Student listed price
           </p>
         </div>
 

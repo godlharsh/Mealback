@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { scanTokenAction } from '@/lib/data-service';
+import { ScanResult } from '@/types/database';
 
 export async function POST(request: Request) {
   try {
@@ -10,7 +11,10 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json(
+        { result: 'INVALID', message: 'Unauthorized. Please sign in as mess staff.' } as ScanResult,
+        { status: 401 }
+      );
     }
 
     // Get staff profile
@@ -22,7 +26,10 @@ export async function POST(request: Request) {
 
     if (!profile || profile.role !== 'mess' || !profile.mess_id) {
       return NextResponse.json(
-        { error: 'Only authorized mess staff can scan tokens.' },
+        {
+          result: 'INVALID',
+          message: 'Only authorized mess staff linked to a mess can verify tokens.',
+        } as ScanResult,
         { status: 403 }
       );
     }
@@ -30,15 +37,18 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { identifier } = body;
 
-    if (!identifier || typeof identifier !== 'string') {
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
       return NextResponse.json(
-        { error: 'Token identifier (QR code or short code) is required.' },
+        {
+          result: 'INVALID',
+          message: 'Please provide a valid QR code or enter a short code.',
+        } as ScanResult,
         { status: 400 }
       );
     }
 
     const result = await scanTokenAction({
-      identifier,
+      identifier: identifier.trim(),
       messId: profile.mess_id,
       staffId: user.id,
     });
@@ -46,7 +56,10 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || 'Scan verification error' },
+      {
+        result: 'INVALID',
+        message: err.message || 'Scan verification error occurred',
+      } as ScanResult,
       { status: 500 }
     );
   }

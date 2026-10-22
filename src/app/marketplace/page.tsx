@@ -39,44 +39,68 @@ export default function MarketplacePage() {
     async function loadData() {
       setIsLoading(true);
 
-      // Check current session
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const nowIso = new Date().toISOString();
 
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        setCurrentUser({
-          email: user.email,
-          role: profile?.role || user.user_metadata?.role || 'student',
-          fullName: profile?.full_name || user.user_metadata?.full_name,
-          id: user.id,
-        });
-      }
-
-      // Fetch messes
-      const { data: messesData } = await supabase.from('messes').select('*');
-      if (messesData && messesData.length > 0) {
-        setMesses(messesData);
-      } else {
-        setMesses([
-          {
-            id: 'demo-mess-1',
-            name: 'Boys Hostel A Mess',
-            access_code: 'MESS-DEMO',
-            created_at: new Date().toISOString(),
-          },
+        // Run user session, messes, and tokens queries concurrently
+        const [authRes, messesRes, tokensRes] = await Promise.all([
+          supabase.auth.getUser(),
+          supabase.from('messes').select('*').order('name'),
+          supabase
+            .from('tokens')
+            .select('*, messes(*)')
+            .eq('status', 'listed')
+            .gt('cutoff_at', nowIso)
+            .order('meal_date', { ascending: true })
+            .order('meal_time', { ascending: true }),
         ]);
-      }
 
-      // Fetch marketplace tokens
-      await fetchTokens();
-      setIsLoading(false);
+        const user = authRes.data.user;
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+
+          setCurrentUser({
+            email: user.email,
+            role: profile?.role || user.user_metadata?.role || 'student',
+            fullName: profile?.full_name || user.user_metadata?.full_name,
+            id: user.id,
+          });
+        }
+
+        if (messesRes.data && messesRes.data.length > 0) {
+          setMesses(messesRes.data);
+        } else {
+          setMesses([]);
+        }
+
+        if (tokensRes.data && !tokensRes.error && tokensRes.data.length > 0) {
+          const mapped: MarketplaceToken[] = tokensRes.data.map((t: any) => ({
+            id: t.id,
+            mess_id: t.mess_id,
+            mess_name: t.messes?.name || 'Campus Mess',
+            mess_location: t.messes?.location,
+            meal_type: t.meal_type as MealType,
+            meal_date: t.meal_date,
+            meal_time: t.meal_time,
+            cutoff_at: t.cutoff_at,
+            valid_until: t.valid_until,
+            list_price: Number(t.list_price),
+            status: t.status,
+            created_at: t.created_at,
+          }));
+          setTokens(mapped);
+        } else {
+          setTokens([]);
+        }
+      } catch (err) {
+        console.warn('Marketplace load note:', err);
+      } finally {
+        setIsLoading(false);
+      }
     }
 
     loadData();
@@ -87,7 +111,7 @@ export default function MarketplacePage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tokens' },
-        (payload) => {
+        () => {
           // Refresh list when tokens are added, bought, or updated
           fetchTokens();
         }
@@ -121,69 +145,18 @@ export default function MarketplacePage() {
           meal_time: t.meal_time,
           cutoff_at: t.cutoff_at,
           valid_until: t.valid_until,
-          face_price: Number(t.face_price || 40),
-          list_price: Number(t.list_price || 30),
+          face_price: Number(t.face_price || t.list_price),
+          list_price: Number(t.list_price),
           status: t.status,
           created_at: t.created_at,
         }));
         setTokens(mapped);
       } else {
-        // High-fidelity demo sample tokens
-        const todayStr = new Date().toISOString().split('T')[0];
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-        setTokens([
-          {
-            id: 'demo-token-1',
-            mess_id: 'demo-mess-1',
-            mess_name: 'Boys Hostel A Mess',
-            mess_location: 'Campus Block 3, North Wing',
-            meal_type: 'dinner',
-            meal_date: todayStr,
-            meal_time: '20:30:00',
-            cutoff_at: new Date(Date.now() + 3 * 3600 * 1000).toISOString(),
-            valid_until: new Date(Date.now() + 5 * 3600 * 1000).toISOString(),
-            face_price: 40,
-            list_price: 30,
-            status: 'listed',
-            created_at: new Date().toISOString(),
-          },
-          {
-            id: 'demo-token-2',
-            mess_id: 'demo-mess-1',
-            mess_name: 'Boys Hostel A Mess',
-            mess_location: 'Campus Block 3, North Wing',
-            meal_type: 'lunch',
-            meal_date: tomorrowStr,
-            meal_time: '13:00:00',
-            cutoff_at: new Date(Date.now() + 16 * 3600 * 1000).toISOString(),
-            valid_until: new Date(Date.now() + 19 * 3600 * 1000).toISOString(),
-            face_price: 40,
-            list_price: 30,
-            status: 'listed',
-            created_at: new Date().toISOString(),
-          },
-          {
-            id: 'demo-token-3',
-            mess_id: 'demo-mess-1',
-            mess_name: 'Girls Hostel B Mess',
-            mess_location: 'Campus Block 7, South Wing',
-            meal_type: 'dinner',
-            meal_date: tomorrowStr,
-            meal_time: '20:00:00',
-            cutoff_at: new Date(Date.now() + 23 * 3600 * 1000).toISOString(),
-            valid_until: new Date(Date.now() + 25 * 3600 * 1000).toISOString(),
-            face_price: 40,
-            list_price: 30,
-            status: 'listed',
-            created_at: new Date().toISOString(),
-          },
-        ]);
+        setTokens([]);
       }
     } catch (e) {
       console.warn('Marketplace fetch note:', e);
+      setTokens([]);
     }
   };
 
@@ -225,10 +198,10 @@ export default function MarketplacePage() {
               Live Meal Exchange
             </span>
             <h1 className="text-2xl md:text-3xl font-black tracking-tight">
-              Fresh Mess Meals at ₹30
+              Campus Meal Marketplace
             </h1>
             <p className="text-emerald-100/90 text-sm mt-1.5 leading-relaxed">
-              Hostel students skip meals. You get value-priced meals. Verified with one-time QR passes and instant meal service.
+              Hostel students list their unused meals at great value. Get instant one-time QR passes for easy mess verification.
             </p>
           </div>
 
@@ -239,7 +212,7 @@ export default function MarketplacePage() {
                 className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-brand-yellow text-brand-dark font-extrabold text-sm shadow-md hover:bg-yellow-400 transition-colors"
               >
                 <PlusCircle className="w-4 h-4" />
-                List a Meal (Earn ₹22)
+                List a Meal
               </Link>
             )}
             <Link

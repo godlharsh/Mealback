@@ -10,9 +10,6 @@ export class DemoUPIProvider implements PaymentProvider {
   name = 'Demo UPI (Simulation)';
 
   async processPayment(request: PaymentRequest): Promise<PaymentResponse> {
-    // Artificial 2-second realistic UPI network delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
     // Generate realistic UPI Reference Number (e.g., UPI/DEMO/492104928172)
     const randomDigits = Math.floor(100000000000 + Math.random() * 900000000000);
     const paymentRef = `UPI/DEMO/${randomDigits}`;

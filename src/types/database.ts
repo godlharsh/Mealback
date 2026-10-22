@@ -9,7 +9,10 @@ export interface Mess {
   name: string;
   location?: string | null;
   access_code: string;
+  is_active?: boolean;
+  created_by?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Profile {
@@ -18,6 +21,7 @@ export interface Profile {
   full_name: string | null;
   role: UserRole;
   mess_id: string | null;
+  is_mess_manager?: boolean;
   hostel_room: string | null;
   created_at: string;
   updated_at: string;
@@ -32,11 +36,7 @@ export interface Token {
   meal_time: string;
   cutoff_at: string;
   valid_until: string;
-  face_price: number;
   list_price: number;
-  seller_payout: number;
-  mess_share: number;
-  platform_fee: number;
   status: TokenStatus;
   buyer_id?: string | null;
   qr_secret?: string; // Only present for owner/buyer or admin
@@ -60,7 +60,6 @@ export interface MarketplaceToken {
   meal_time: string;
   cutoff_at: string;
   valid_until: string;
-  face_price: number;
   list_price: number;
   status: TokenStatus;
   created_at: string;

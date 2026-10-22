@@ -31,10 +31,13 @@ export function DemoUPIModal({
   const [step, setStep] = useState<'prompt' | 'processing' | 'success' | 'failed'>('prompt');
   const [selectedUPIApp, setSelectedUPIApp] = useState<'gpay' | 'phonepe' | 'paytm'>('gpay');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   if (!isOpen || !token) return null;
 
   const handlePay = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setStep('processing');
     setErrorMessage('');
 
@@ -50,6 +53,7 @@ export function DemoUPIModal({
       if (!res.ok || !data.success) {
         setErrorMessage(data.error || 'Payment failed. Please try again.');
         setStep('failed');
+        setIsSubmitting(false);
         return;
       }
 
@@ -69,17 +73,20 @@ export function DemoUPIModal({
       }
 
       setTimeout(() => {
+        setIsSubmitting(false);
         onSuccess(data.token);
-      }, 1800);
+      }, 500);
     } catch (err: any) {
       setErrorMessage(err.message || 'Network error occurred during payment.');
       setStep('failed');
+      setIsSubmitting(false);
     }
   };
 
   const handleReset = () => {
     setStep('prompt');
     setErrorMessage('');
+    setIsSubmitting(false);
     onClose();
   };
 
@@ -99,10 +106,10 @@ export function DemoUPIModal({
                 ₹
               </div>
               <div>
-                <h4 className="font-extrabold text-sm tracking-wide">MealBack UPI Gateway</h4>
-                <div className="flex items-center gap-1 text-[11px] text-emerald-300">
+                <h4 className="font-extrabold text-sm tracking-wide">MealBack Sandbox Checkout</h4>
+                <div className="flex items-center gap-1 text-[11px] text-amber-300">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Verified Campus Merchant</span>
+                  <span>Sandbox Environment &bull; No Real Funds Debited</span>
                 </div>
               </div>
             </div>
@@ -118,9 +125,9 @@ export function DemoUPIModal({
           </div>
 
           {/* Test Mode Label Banner */}
-          <div className="bg-amber-100 text-amber-900 px-4 py-1.5 text-xs font-semibold text-center flex items-center justify-center gap-1.5 border-b border-amber-200">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-            <span>Demo payment (test mode) &bull; Simulated UPI</span>
+          <div className="bg-amber-100 text-amber-900 px-4 py-2 text-xs font-semibold text-center flex items-center justify-center gap-1.5 border-b border-amber-200">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>Sandbox Mode: Payment gateway not configured. Simulating purchase.</span>
           </div>
 
           <div className="p-6">
@@ -141,9 +148,6 @@ export function DemoUPIModal({
                   <div className="mt-3 pt-3 border-t border-brand-primary/10 flex items-center justify-center gap-2">
                     <span className="text-3xl font-black text-brand-dark">
                       ₹{token.list_price}
-                    </span>
-                    <span className="text-sm font-semibold text-brand-muted line-through">
-                      ₹{token.face_price}
                     </span>
                   </div>
                 </div>
@@ -178,15 +182,25 @@ export function DemoUPIModal({
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={handlePay}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-brand-primary text-white font-extrabold text-base shadow-card hover:bg-brand-dark transition-all flex items-center justify-center gap-2"
+                  disabled={isSubmitting}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-brand-primary text-white font-extrabold text-base shadow-card hover:bg-brand-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <span>Pay ₹{token.list_price}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Initiating UPI...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Pay ₹{token.list_price}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </motion.button>
 
                 <div className="flex items-center justify-center gap-1.5 text-[11px] text-brand-muted">
                   <Lock className="w-3 h-3 text-brand-primary" />
-                  <span>256-bit simulated end-to-end encryption</span>
+                  <span>Sandbox checkout for development & testing</span>
                 </div>
               </div>
             )}
@@ -199,10 +213,10 @@ export function DemoUPIModal({
                 </div>
                 <div>
                   <h4 className="font-extrabold text-lg text-brand-ink">
-                    Processing UPI Payment...
+                    Reserving Token...
                   </h4>
                   <p className="text-xs text-brand-muted mt-1">
-                    Contacting issuing bank & locking token atomically...
+                    Processing atomic token reservation in Supabase...
                   </p>
                 </div>
               </div>
